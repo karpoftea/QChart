@@ -1,0 +1,257 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Transactions</title>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+<script type="text/javascript" src="http://www.datejs.com/build/date.js"></script>
+<script src="http://code.highcharts.com/stock/highstock.js"></script>
+<script src="http://code.highcharts.com/stock/modules/exporting.js"></script>
+<script type="text/javascript">
+
+Highcharts.createElement('link', {
+    href: 'http://fonts.googleapis.com/css?family=Dosis:400,600',
+    rel: 'stylesheet',
+    type: 'text/css'
+}, null, document.getElementsByTagName('head')[0]);
+
+Highcharts.theme = {
+    colors: ["#7cb5ec", "#f7a35c", "#90ee7e", "#7798BF", "#aaeeee", "#ff0066", "#eeaaee",
+        "#55BF3B", "#DF5353", "#7798BF", "#aaeeee"],
+    chart: {
+        backgroundColor: null,
+        style: {
+            fontFamily: "Dosis, sans-serif"
+        }
+    },
+    title: {
+        style: {
+            fontSize: '16px',
+            fontWeight: 'bold',
+            textTransform: 'uppercase'
+        }
+    },
+    tooltip: {
+        borderWidth: 0,
+        backgroundColor: 'rgba(219,219,216,0.8)',
+        shadow: false
+    },
+    legend: {
+        itemStyle: {
+            fontWeight: 'bold',
+            fontSize: '13px'
+        }
+    },
+    xAxis: {
+        gridLineWidth: 1,
+        labels: {
+            style: {
+                fontSize: '12px'
+            }
+        }
+    },
+    yAxis: {
+        minorTickInterval: 'auto',
+        title: {
+            style: {
+                textTransform: 'uppercase'
+            }
+        },
+        labels: {
+            style: {
+                fontSize: '12px'
+            }
+        }
+    },
+    plotOptions: {
+        candlestick: {
+            lineColor: '#404048'
+        }
+    },
+
+
+
+    background2: '#F0F0EA'
+
+};
+
+Highcharts.setOptions(Highcharts.theme);
+
+$(function () {
+    /**
+     * Load new data depending on the selected min and max
+     */
+    function reloadData(e) {
+        var chart = $('#container').highcharts();
+        chart.showLoading('Loading data from server...');
+
+        $.getJSON(
+                'http://localhost:8080/initial.data5',
+                function (data) {
+                    //todo check data.length
+
+                    //delete unused
+                    for (var i = 0; i < chart.series.length; i++) {
+                        var prvName = chart.series[i].name;
+
+                        var exists = false;
+                        for (var j = 0; j < data.length; j++) {
+                            if (prvName == createPrvName(data[j])) {
+                                exists = true;
+                                break;
+                            }
+                        }
+
+                        if (!exists) {
+                            chart.series[i].remove(false);
+                            i = 0;
+                        }
+                    }
+
+                    //update old, add new
+                    for (var i = 0; i < data.length; i++) {
+                        var prvName = createPrvName(data[i]);
+                        var prvData = data[i].data;
+
+                        var updated = false;
+                        for (var j = 0; j < chart.series.length; j++) {
+                            if (chart.series[j].name == prvName) {
+                                chart.series[j].setData(prvData);
+                                updated = true;
+                                break;
+                            }
+                        }
+
+                        if (!updated) {
+                            chart.addSeries(createSeriesItem(data[i]));
+                        }
+                    }
+
+                    chart.hideLoading();
+                });
+    }
+
+    function toSeries(data) {
+        var series = [];
+        for (var i = 0; i < data.length; i++) {
+            var item = createSeriesItem(data[i]);
+            series.push(item);
+        }
+        return series;
+    }
+
+    function createSeriesItem(dataItem) {
+        return {
+            name : createPrvName(dataItem),
+            data : dataItem.data,
+            marker : {
+                enabled : true,
+                radius : 3
+            },
+            shadow : true,
+            dataGrouping: {
+                enabled: false
+            }
+        };
+    }
+
+    function createPrvName(dataItem) {
+        return dataItem.prvName + '(' + dataItem.prvId + ')';
+    }
+
+    $.getJSON(
+            'http://localhost:8080/initial.data4',
+            function (data) {
+
+                var series = toSeries(data);
+
+                $('#container').highcharts('StockChart', {
+                    navigator : {
+                        adaptToUpdatedData: false,
+                        series : {
+                            data : data
+                        }
+                    },
+
+                    scrollbar: {
+                        liveRedraw: false
+                    },
+
+                    title: {
+                        text: 'Transactions rate'
+                    },
+
+                    subtitle: {
+                        text: 'Displaying transaction rate of QD providers'
+                    },
+
+                    rangeSelector : {
+                        selected: 1,
+                        buttons: [{
+                            type: 'month',
+                            count: 1,
+                            text: '1m'
+                        }, {
+                            type: 'year',
+                            count: 1,
+                            text: '1y'
+                        }, {
+                            type: 'all',
+                            text: 'All'
+                        }]
+                    },
+
+                    xAxis : {
+                        type: 'datetime',
+                        events : {
+                            afterSetExtremes : reloadData
+                        }
+                    },
+
+                    yAxis: {
+                        floor: 0
+                    },
+
+                    tooltip: {
+                        shared: false,
+                        crosshairs: [true,true],
+                        formatter: function (e, p, q, w, r, t) {
+                            if (this.point) {
+                                var p = this.point;
+                                // return 'OK';
+
+                                return '<b>' + this.series.name + '</b>:' +
+                                        '<br/>' + new Date(this.x).toString("dd.mm.yyyy hh:mm:ss") +
+                                        '<br/>Всего трансакций=' + this.y +
+                                        '<br/>Сумма=' + p.totalSum +
+                                        '<br/>Средний чек=' + p.agvCheck +
+                                        '<br/>Макс. чек=' + p.maxCheck +
+                                        '<br/>Мин. чек=' + p.maxCheck;
+                            }
+
+
+                            // return 'Extra data: <b>' + this.point.myData + '</b>' + '<br/><p>at: <b>(' + this.point.x + ',' + this.point.y + ')</b>';
+                        }
+                    },
+
+                    legend: {
+                        layout: 'vertical',
+                        align: 'right',
+                        verticalAlign: 'middle',
+                        borderWidth: 0,
+                        enabled: true
+                    },
+
+
+
+                    series : series
+                });
+            });
+});
+</script>
+</head>
+
+<body>
+<div id="container" style="height: 400px; min-width: 310px"></div>
+</body>
+</html>
